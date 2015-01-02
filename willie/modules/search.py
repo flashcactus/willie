@@ -16,6 +16,68 @@ import json
 import sys
 import time
 
+def replacefun(repwith, msg=None):
+	def rfg(fun):
+		def repfun(*args, **kwargs):
+			return repwith(*args, **kwargs)
+		return repfun
+	return rfg
+
+
+def duck_search(query):
+    query = query.replace('!', '')
+    uri = 'http://duckduckgo.com/html/?q=%s&kl=uk-en' % query
+    bytes = web.get(uri)
+    if 'web-result"' in bytes:  # filter out the adds on top of the page
+        bytes = bytes.split('web-result"')[1]
+    m = r_duck.search(bytes)
+    if m:
+        return web.decode(m.group(1))
+
+
+def duck_api(query):
+    if '!bang' in query.lower():
+        return 'https://duckduckgo.com/bang.html'
+
+    uri = 'http://api.duckduckgo.com/?q=%s&format=json&no_html=1&no_redirect=1' % query
+    results = json.loads(web.get(uri))
+    if results['Redirect']:
+        return results['Redirect']
+    else:
+        return None
+
+
+@commands('duck', 'ddg')
+@example('.duck privacy or .duck !mcwiki obsidian')
+def duck(bot, trigger):
+    """Queries Duck Duck Go for the specified input."""
+    query = trigger.group(2)
+    if not query:
+        return bot.reply('.ddg what?')
+
+    #If the API gives us something, say it and stop
+    result = duck_api(query)
+    if result:
+        bot.reply(result)
+        return
+
+    #Otherwise, look it up on the HTMl version
+    uri = duck_search(query)
+
+    if uri:
+        bot.reply(uri)
+        if 'last_seen_url' in bot.memory:
+            bot.memory['last_seen_url'][trigger.sender] = uri
+    else:
+        bot.reply("No results found for '%s'." % query)
+
+
+def duck_csearch(query):
+    result = duck_api(query)
+    if result:
+        return result
+    return duck_search(query)
+
 
 def google_ajax(query):
     """Search using AjaxSearch, and return its JSON."""
@@ -24,7 +86,7 @@ def google_ajax(query):
     bytes = web.get(uri + args)
     return json.loads(bytes)
 
-
+@replacefun(duck_csearch)
 def google_search(query):
     results = google_ajax(query)
     try:
@@ -53,9 +115,9 @@ def formatnumber(n):
         parts.insert(i, ',')
     return ''.join(parts)
 
-
 @commands('g', 'google')
 @example('.g swhack')
+@replacefun(duck, "Google has replaced its search API with another, that disallows more than 100 queries per day without shelling out money. Use .ddg instead(and have a nice result from DDG).")
 def g(bot, trigger):
     """Queries Google for the specified input."""
     query = trigger.group(2)
@@ -124,52 +186,6 @@ def bing_search(query, lang='en-GB'):
 r_duck = re.compile(r'nofollow" class="[^"]+" href="(.*?)">')
 
 
-def duck_search(query):
-    query = query.replace('!', '')
-    uri = 'http://duckduckgo.com/html/?q=%s&kl=uk-en' % query
-    bytes = web.get(uri)
-    if 'web-result"' in bytes:  # filter out the adds on top of the page
-        bytes = bytes.split('web-result"')[1]
-    m = r_duck.search(bytes)
-    if m:
-        return web.decode(m.group(1))
-
-
-def duck_api(query):
-    if '!bang' in query.lower():
-        return 'https://duckduckgo.com/bang.html'
-
-    uri = 'http://api.duckduckgo.com/?q=%s&format=json&no_html=1&no_redirect=1' % query
-    results = json.loads(web.get(uri))
-    if results['Redirect']:
-        return results['Redirect']
-    else:
-        return None
-
-
-@commands('duck', 'ddg')
-@example('.duck privacy or .duck !mcwiki obsidian')
-def duck(bot, trigger):
-    """Queries Duck Duck Go for the specified input."""
-    query = trigger.group(2)
-    if not query:
-        return bot.reply('.ddg what?')
-
-    #If the API gives us something, say it and stop
-    result = duck_api(query)
-    if result:
-        bot.reply(result)
-        return
-
-    #Otherwise, look it up on the HTMl version
-    uri = duck_search(query)
-
-    if uri:
-        bot.reply(uri)
-        if 'last_seen_url' in bot.memory:
-            bot.memory['last_seen_url'][trigger.sender] = uri
-    else:
-        bot.reply("No results found for '%s'." % query)
 
 
 @commands('search')
